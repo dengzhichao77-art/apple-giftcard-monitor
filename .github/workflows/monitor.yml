@@ -2,7 +2,7 @@ name: Apple Gift Card Monitor
 
 on:
   schedule:
-    - cron: '*/11 * * * *'  # 每11分钟一次（最接近10.8分钟）
+    - cron: '*/11 * * * *'  # 每11分钟一次
   workflow_dispatch:
 
 jobs:
@@ -26,5 +26,8 @@ jobs:
         playwright install chromium
         
     - name: Run monitor
+      env:
+        LINE_ACCESS_TOKEN: ${{ secrets.LINE_ACCESS_TOKEN }}
+        LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
       run: |
         python monitor.py
