@@ -2,8 +2,10 @@ name: Apple Gift Card Monitor
 
 on:
   schedule:
-    - cron: '*/10 * * * *'  # 每10分钟一次
-  workflow_dispatch:
+    - cron: '*/10 * * * *'  # 每10分钟一次（GitHub调度）
+  workflow_dispatch:         # 手动触发
+  repository_dispatch:       # 添加这个以支持外部API触发
+    types: [trigger_monitor]
 
 jobs:
   monitor:
