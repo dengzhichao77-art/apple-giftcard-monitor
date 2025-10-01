@@ -2,7 +2,7 @@ name: Apple Gift Card Monitor
 
 on:
   schedule:
-    - cron: '*/2 * * * *'  # 每2分钟一次
+    - cron: '*/10 * * * *'  # 每10分钟一次
   workflow_dispatch:
 
 jobs:
