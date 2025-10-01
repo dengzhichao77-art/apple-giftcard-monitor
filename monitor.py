@@ -4,9 +4,9 @@ import time
 from playwright.sync_api import sync_playwright
 from bs4 import BeautifulSoup
 
-# LINE Messaging API 配置
-LINE_ACCESS_TOKEN = "IvrlgZ9u0izzW2C3Eb0xyHvprQHH0x70DMf99E4itGBe0HsqYX8JE4MTdzCpSm9e2VmqhoNPCWgIk6LVeAHrXiQCmTBcoZ6ag6KPiI8BIntkrUlXfORESUWdlO60BgwE0PJ9XFIbO37ugR+eo4B5swdB04t89/1O/w1cDnyilFU="
-LINE_USER_ID = "U7278cf6212a50c40127da84e3c5e2f27"
+# LINE Messaging API 配置 - 从环境变量读取
+LINE_ACCESS_TOKEN = os.environ.get('LINE_ACCESS_TOKEN')
+LINE_USER_ID = os.environ.get('LINE_USER_ID')
 
 # 全局变量用于跟踪上一次的折扣信息
 last_discounts = []
