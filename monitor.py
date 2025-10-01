@@ -8,9 +8,6 @@ from bs4 import BeautifulSoup
 LINE_ACCESS_TOKEN = os.environ.get('LINE_ACCESS_TOKEN')
 LINE_USER_ID = os.environ.get('LINE_USER_ID')
 
-# 全局变量用于跟踪上一次的折扣信息
-last_discounts = []
-
 def send_line_message(message):
     """发送LINE消息给自己"""
     if not LINE_ACCESS_TOKEN or not LINE_USER_ID:
@@ -47,8 +44,8 @@ def send_line_message(message):
         print(f"❌ LINE消息发送错误: {str(e)}")
         return False
 
-def should_skip_check():
-    """根据当前时间决定是否跳过检查"""
+def should_run_check():
+    """根据当前时间决定是否执行检查"""
     import datetime
     
     # 获取当前日本时间
@@ -60,17 +57,18 @@ def should_skip_check():
     
     print(f"🕐 当前时间: {now.strftime('%Y-%m-%d %H:%M JST')}, 星期{['一','二','三','四','五','六','日'][weekday]}")
     
-    # 0-6点之间：30分钟一次
+    # 0-6点之间：只在0分和30分运行
     if 0 <= hour < 6:
-        # 只在0分和30分运行
-        if minute not in [0, 30]:
-            print("💤 0-6点时段，非30分钟间隔时间，跳过")
+        if minute in [0, 30]:
+            print("✅ 0-6点时段，在30分钟间隔时间，执行检查")
             return True
+        else:
+            print("💤 0-6点时段，非30分钟间隔时间，跳过")
+            return False
     
-    # 其他时间：10分钟一次（不需要特殊处理，因为GitHub每10分钟触发一次）
-    
-    print("✅ 检查时段，继续执行")
-    return False
+    # 其他时间：每次都执行（因为GitHub调度可能不稳定）
+    print("✅ 活跃时段，执行检查")
+    return True
 
 def check_discounts():
     """检查折扣信息"""
@@ -156,40 +154,22 @@ def extract_discounts_from_html(html_content):
         print(f"❌ 割引抽出エラー: {str(e)}")
         return []
 
-def has_discounts_changed(new_discounts):
-    """检查折扣信息是否有变化"""
-    global last_discounts
+def get_discounts_fingerprint(discounts):
+    """生成折扣信息的指纹，用于比较变化"""
+    if not discounts:
+        return "no_discounts"
     
-    # 如果之前没有记录，直接返回True
-    if not last_discounts:
-        last_discounts = new_discounts
-        return True
+    # 只取前3个最佳折扣生成指纹
+    fingerprint_parts = []
+    for deal in discounts[:3]:
+        fingerprint_parts.append(f"{deal['discount']}:{deal['face_value']}:{deal['price']}")
     
-    # 比较折扣数量和最低折扣
-    if len(new_discounts) != len(last_discounts):
-        last_discounts = new_discounts
-        return True
-    
-    # 比较每个折扣项
-    for i, (new, old) in enumerate(zip(new_discounts, last_discounts)):
-        if (new['discount'] != old['discount'] or 
-            new['face_value'] != old['face_value'] or
-            new['price'] != old['price']):
-            last_discounts = new_discounts
-            return True
-    
-    # 没有变化
-    return False
+    return "|".join(fingerprint_parts)
 
 def send_notification(discounts):
     """发送简洁的LINE通知 - 只显示最大的优惠"""
     if not discounts:
         print("📊 没有发现80%以下的折扣，不发送通知")
-        return True
-    
-    # 检查折扣是否有变化
-    if not has_discounts_changed(discounts):
-        print("📊 折扣信息没有变化，不发送通知")
         return True
     
     try:
@@ -226,11 +206,11 @@ def main():
     now = datetime.datetime.now(jst)
     
     print("=" * 60)
-    print(f"🔄 APPLE礼品卡监控启动 - {now.strftime('%Y-%m-%d %H:%M JST')}")
+    print(f"🔄 APPLE礼品卡监控启动 - {now.strftime('%Y-%m-%d %H:%M:%S JST')}")
     print("=" * 60)
     
-    # 检查是否应该跳过
-    if should_skip_check():
+    # 检查是否应该执行
+    if not should_run_check():
         print("🎯 本次检查已跳过")
         return
     
@@ -247,7 +227,7 @@ def main():
     # 提取折扣信息
     discounts = extract_discounts_from_html(html_content)
     
-    # 发送通知（只在有变化时发送）
+    # 发送通知（暂时每次都发送，因为状态无法持久化）
     send_notification(discounts)
     
     execution_time = time.time() - start_time
