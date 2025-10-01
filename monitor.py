@@ -153,7 +153,7 @@ def has_discounts_changed(new_discounts):
     return False
 
 def send_notification(discounts):
-    """发送简洁的LINE通知"""
+    """发送简洁的LINE通知 - 只显示最大的优惠"""
     if not discounts:
         print("📊 没有发现80%以下的折扣，不发送通知")
         return True
@@ -166,22 +166,15 @@ def send_notification(discounts):
     try:
         print("📨 发送LINE通知...")
         
-        # 构建简洁消息
-        if discounts:
-            # 只显示最低的几个折扣
-            min_discounts = discounts[:3]  # 最多显示3个
-            
-            message = "🎯 Apple礼品卡优惠更新\n\n"
-            
-            for deal in min_discounts:
-                message += f"• {deal['discount']}%优惠幅度出现\n"
-            
-            if len(discounts) > 3:
-                message += f"• 还有{len(discounts)-3}个其他优惠\n"
-            
-            message += "\n🔗 查看详情: https://amaten.com/exhibitions/apple"
-        else:
-            message = "📊 当前无80%以下优惠"
+        # 只取最大的优惠（折扣率最低的）
+        best_deal = discounts[0]
+        
+        # 构建简洁消息 - 格式: 「79％、10000円→7900円」
+        message = f"🎯 {best_deal['discount']}％、{best_deal['face_value']}→{best_deal['price']}"
+        
+        # 如果有多个优惠，在消息末尾添加数量提示
+        if len(discounts) > 1:
+            message += f" (他{len(discounts)-1}件)"
         
         success = send_line_message(message)
         
