@@ -1,16 +1,306 @@
 import os
 import requests
-import re
 import time
 from playwright.sync_api import sync_playwright
 from bs4 import BeautifulSoup
 
+# LINE Messaging API 配置 - 使用您提供的凭证
+LINE_ACCESS_TOKEN = "IvrlgZ9u0izzW2C3Eb0xyHvprQHH0x70DMf99E4itGBe0HsqYX8JE4MTdzCpSm9e2VmqhoNPCWgIk6LVeAHrXiQCmTBcoZ6ag6KPiI8BIntkrUlXfORESUWdlO60BgwE0PJ9XFIbO37ugR+eo4B5swdB04t89/1O/w1cDnyilFU="
+LINE_USER_ID = "U7278cf6212a50c40127da84e3c5e2f27"
+
+def send_line_message(message):
+    """发送LINE消息给自己"""
+    try:
+        url = "https://api.line.me/v2/bot/message/push"
+        headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {LINE_ACCESS_TOKEN}'
+        }
+        
+        message_data = {
+            "to": LINE_USER_ID,
+            "messages": [
+                {
+                    "type": "text",
+                    "text": message
+                }
+            ]
+        }
+        
+        response = requests.post(url, headers=headers, json=message_data)
+        
+        if response.status_code == 200:
+            print("✅ LINE消息发送成功!")
+            return True
+        elif response.status_code == 401:
+            print("❌ Access Token无效")
+            return False
+        elif response.status_code == 403:
+            print("❌ 权限不足，请检查Channel设置")
+            return False
+        else:
+            print(f"❌ LINE消息发送失败: {response.status_code} - {response.text}")
+            return False
+            
+    except Exception as e:
+        print(f"❌ LINE消息发送错误: {str(e)}")
+        return False
+
+def send_line_flex_message(discounts):
+    """发送更美观的LINE Flex Message"""
+    try:
+        url = "https://api.line.me/v2/bot/message/push"
+        headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {LINE_ACCESS_TOKEN}'
+        }
+        
+        if discounts:
+            # 创建折扣信息的Flex Message
+            bubbles = []
+            
+            for i, deal in enumerate(discounts[:5]):  # 最多显示5个
+                bubble = {
+                    "type": "bubble",
+                    "size": "micro",
+                    "body": {
+                        "type": "box",
+                        "layout": "vertical",
+                        "contents": [
+                            {
+                                "type": "text",
+                                "text": f"{deal['discount']}% OFF",
+                                "weight": "bold",
+                                "size": "lg",
+                                "color": "#1DB446"
+                            },
+                            {
+                                "type": "separator",
+                                "margin": "md"
+                            },
+                            {
+                                "type": "box",
+                                "layout": "vertical",
+                                "margin": "lg",
+                                "spacing": "sm",
+                                "contents": [
+                                    {
+                                        "type": "box",
+                                        "layout": "baseline",
+                                        "contents": [
+                                            {
+                                                "type": "text",
+                                                "text": "額面",
+                                                "color": "#aaaaaa",
+                                                "size": "sm",
+                                                "flex": 2
+                                            },
+                                            {
+                                                "type": "text",
+                                                "text": deal['face_value'],
+                                                "wrap": True,
+                                                "color": "#666666",
+                                                "size": "sm",
+                                                "flex": 4
+                                            }
+                                        ]
+                                    },
+                                    {
+                                        "type": "box",
+                                        "layout": "baseline",
+                                        "contents": [
+                                            {
+                                                "type": "text",
+                                                "text": "価格",
+                                                "color": "#aaaaaa",
+                                                "size": "sm",
+                                                "flex": 2
+                                            },
+                                            {
+                                                "type": "text",
+                                                "text": deal['price'],
+                                                "wrap": True,
+                                                "color": "#666666",
+                                                "size": "sm",
+                                                "flex": 4
+                                            }
+                                        ]
+                                    },
+                                    {
+                                        "type": "box",
+                                        "layout": "baseline",
+                                        "contents": [
+                                            {
+                                                "type": "text",
+                                                "text": "節約",
+                                                "color": "#aaaaaa",
+                                                "size": "sm",
+                                                "flex": 2
+                                            },
+                                            {
+                                                "type": "text",
+                                                "text": deal['discount_amount'],
+                                                "wrap": True,
+                                                "color": "#FF0000",
+                                                "size": "sm",
+                                                "flex": 4,
+                                                "weight": "bold"
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    "footer": {
+                        "type": "box",
+                        "layout": "vertical",
+                        "spacing": "sm",
+                        "contents": [
+                            {
+                                "type": "button",
+                                "style": "primary",
+                                "height": "sm",
+                                "action": {
+                                    "type": "uri",
+                                    "label": "購入ページへ",
+                                    "uri": "https://amaten.com/exhibitions/apple"
+                                }
+                            }
+                        ]
+                    }
+                }
+                bubbles.append(bubble)
+            
+            # 添加总结bubble
+            summary_bubble = {
+                "type": "bubble",
+                "size": "micro",
+                "body": {
+                    "type": "box",
+                    "layout": "vertical",
+                    "contents": [
+                        {
+                            "type": "text",
+                            "text": "📊 サマリー",
+                            "weight": "bold",
+                            "size": "lg",
+                            "color": "#000000"
+                        },
+                        {
+                            "type": "separator",
+                            "margin": "md"
+                        },
+                        {
+                            "type": "box",
+                            "layout": "vertical",
+                            "margin": "lg",
+                            "spacing": "sm",
+                            "contents": [
+                                {
+                                    "type": "box",
+                                    "layout": "baseline",
+                                    "contents": [
+                                        {
+                                            "type": "text",
+                                            "text": "見つけた割引",
+                                            "color": "#aaaaaa",
+                                            "size": "sm",
+                                            "flex": 3
+                                        },
+                                        {
+                                            "type": "text",
+                                            "text": f"{len(discounts)}件",
+                                            "wrap": True,
+                                            "color": "#1DB446",
+                                            "size": "sm",
+                                            "flex": 2,
+                                            "weight": "bold"
+                                        }
+                                    ]
+                                },
+                                {
+                                    "type": "box",
+                                    "layout": "baseline",
+                                    "contents": [
+                                        {
+                                            "type": "text",
+                                            "text": "最低割引",
+                                            "color": "#aaaaaa",
+                                            "size": "sm",
+                                            "flex": 3
+                                        },
+                                        {
+                                            "type": "text",
+                                            "text": f"{discounts[0]['discount']}%",
+                                            "wrap": True,
+                                            "color": "#FF0000",
+                                            "size": "sm",
+                                            "flex": 2,
+                                            "weight": "bold"
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }
+            bubbles.append(summary_bubble)
+            
+            message_data = {
+                "to": LINE_USER_ID,
+                "messages": [
+                    {
+                        "type": "flex",
+                        "altText": f"Appleギフトカード割引 {len(discounts)}件見つかりました",
+                        "contents": {
+                            "type": "carousel",
+                            "contents": bubbles
+                        }
+                    }
+                ]
+            }
+        else:
+            # 没有折扣时的简单消息
+            message_data = {
+                "to": LINE_USER_ID,
+                "messages": [
+                    {
+                        "type": "text",
+                        "text": "📊 Appleギフトカード監視レポート\n\n現在、85%以下の割引商品は見つかりませんでした。\n\n次のチェックは2時間後です。⏰"
+                    }
+                ]
+            }
+        
+        response = requests.post(url, headers=headers, json=message_data)
+        
+        if response.status_code == 200:
+            print("✅ LINE Flex Message送信成功!")
+            return True
+        else:
+            print(f"❌ LINE Flex Message送信失敗: {response.status_code}")
+            # 失败时回退到普通文本消息
+            if discounts:
+                message = f"🎉 Appleギフトカード割引情報\n\n{len(discounts)}件の割引商品が見つかりました！\n\n"
+                for deal in discounts[:3]:
+                    message += f"• {deal['discount']}% OFF (額面: {deal['face_value']} → 価格: {deal['price']})\n"
+                message += "\n🔗 https://amaten.com/exhibitions/apple"
+            else:
+                message = "📊 現在、85%以下の割引商品は見つかりませんでした。"
+            
+            return send_line_message(message)
+            
+    except Exception as e:
+        print(f"❌ LINE Flex Message送信エラー: {str(e)}")
+        return False
+
 def check_discounts():
-    print("🎯 Starting Apple gift card discount check...")
+    print("🎯 Appleギフトカード割引チェック開始...")
     
     try:
         with sync_playwright() as p:
-            print("🌐 Launching browser...")
+            print("🌐 ブラウザ起動...")
             browser = p.chromium.launch(headless=True)
             page = browser.new_page()
             
@@ -18,61 +308,54 @@ def check_discounts():
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
             })
             
-            print("📡 Navigating to https://amaten.com/exhibitions/apple...")
+            print("📡 https://amaten.com/exhibitions/apple にアクセス...")
             page.goto('https://amaten.com/exhibitions/apple', wait_until='networkidle', timeout=60000)
             
-            print("⏳ Waiting for page to load...")
+            print("⏳ ページ読み込み待機...")
             page.wait_for_timeout(5000)
             
-            # 获取页面内容
             content = page.content()
-            print(f"📊 Page content length: {len(content)} characters")
+            print(f"📊 ページコンテンツ長: {len(content)} 文字")
             
             browser.close()
-            
             return content
         
     except Exception as e:
-        print(f"❌ Error during discount check: {str(e)}")
+        print(f"❌ 割引チェックエラー: {str(e)}")
         import traceback
         traceback.print_exc()
         return None
 
 def extract_discounts_from_html(html_content):
-    """从HTML中提取折扣信息"""
-    print("🔍 Extracting discounts from HTML using BeautifulSoup...")
+    """HTMLから割引情報を抽出"""
+    print("🔍 BeautifulSoupでHTMLから割引情報を抽出...")
     
     discounts = []
     
     try:
-        # 使用BeautifulSoup解析HTML
         soup = BeautifulSoup(html_content, 'html.parser')
         
-        # 方法1: 查找所有js-rate元素（主要方法）
+        # js-rate要素を検索
         rate_elements = soup.find_all('span', class_='js-rate')
-        print(f"📈 Found {len(rate_elements)} js-rate elements")
+        print(f"📈 {len(rate_elements)} 個のjs-rate要素を発見")
         
         for element in rate_elements:
             try:
                 discount_text = element.get_text().strip()
                 discount = float(discount_text)
                 
-                # 只关注低于85%的折扣
+                # 85%以下の割引のみ対象
                 if discount < 85:
-                    # 获取父级行信息用于上下文
                     row = element.find_parent('tr')
                     if row:
-                        # 获取面值
                         face_value_elem = row.find('span', class_='js-face_value')
-                        face_value = face_value_elem.get_text().strip() if face_value_elem else "Unknown"
+                        face_value = face_value_elem.get_text().strip() if face_value_elem else "不明"
                         
-                        # 获取价格
                         price_elem = row.find('span', class_='js-price')
-                        price = price_elem.get_text().strip() if price_elem else "Unknown"
+                        price = price_elem.get_text().strip() if price_elem else "不明"
                         
-                        # 获取折扣金额
                         discount_amount_elem = row.find('span', class_='js-discount')
-                        discount_amount = discount_amount_elem.get_text().strip() if discount_amount_elem else "Unknown"
+                        discount_amount = discount_amount_elem.get_text().strip() if discount_amount_elem else "不明"
                         
                         discounts.append({
                             'discount': discount,
@@ -81,124 +364,63 @@ def extract_discounts_from_html(html_content):
                             'discount_amount': discount_amount,
                             'source': 'js-rate element'
                         })
-                        print(f"✅ Found discount: {discount}% (面值: {face_value}円 → 价格: {price}円, 节省: {discount_amount}円)")
+                        print(f"✅ 割引発見: {discount}% (額面: {face_value} → 価格: {price}, 節約: {discount_amount})")
             except ValueError:
                 continue
         
-        # 方法2: 在表格行中搜索折扣（备用方法）
-        if not discounts:
-            print("🔍 Trying alternative search method...")
-            rows = soup.find_all('tr', class_='js-gift-row')
-            print(f"📊 Found {len(rows)} gift card rows")
-            
-            for row in rows:
-                try:
-                    # 在行文本中搜索百分比
-                    row_text = row.get_text()
-                    percentage_matches = re.findall(r'(\d+\.?\d*)%', row_text)
-                    
-                    for match in percentage_matches:
-                        discount = float(match)
-                        if discount < 85:
-                            # 检查是否已经添加过这个折扣
-                            if not any(abs(d['discount'] - discount) < 0.1 for d in discounts):
-                                discounts.append({
-                                    'discount': discount,
-                                    'face_value': "Unknown",
-                                    'price': "Unknown", 
-                                    'discount_amount': "Unknown",
-                                    'source': 'row text search'
-                                })
-                                print(f"✅ Found discount in row: {discount}%")
-                except:
-                    continue
-        
-        # 按折扣排序（从低到高）
+        # 割引率でソート（低い順）
         discounts.sort(key=lambda x: x['discount'])
         
-        print(f"📈 Total valid discounts found: {len(discounts)}")
+        print(f"📈 有効な割引合計: {len(discounts)} 件")
         return discounts
         
     except Exception as e:
-        print(f"❌ Error extracting discounts: {str(e)}")
+        print(f"❌ 割引抽出エラー: {str(e)}")
         return []
 
 def send_notification(discounts):
-    sckey = os.environ.get('SCKEY')
-    if not sckey:
-        print("❌ SCKEY environment variable not set")
-        return False
-    
+    """LINEに通知を送信"""
     try:
-        if discounts:
-            # 只取最低的3个折扣，避免通知太长
-            top_discounts = discounts[:3]
-            
-            title = f"🎉 发现 {len(discounts)} 个Apple礼品卡优惠!"
-            content = "## 🍎 Apple礼品卡优惠提醒\\n\\n"
-            content += f"共找到 **{len(discounts)}** 个折扣低于85%的优惠！\\n\\n"
-            
-            for i, deal in enumerate(top_discounts, 1):
-                content += f"{i}. **{deal['discount']}% OFF**\\n"
-                content += f"   - 面值: {deal['face_value']}円 → 价格: {deal['price']}円\\n"
-                content += f"   - 节省: {deal['discount_amount']}円\\n\\n"
-            
-            if len(discounts) > 3:
-                content += f"... 还有 {len(discounts) - 3} 个其他优惠\\n\\n"
-            
-            content += "💡 **折扣越低越划算！**\\n"
-            content += "\\n🔗 [立即查看](https://amaten.com/exhibitions/apple)"
-        else:
-            title = "📊 Apple礼品卡监控报告"
-            content = "## 🍎 当前无优惠\\n\\n"
-            content += "目前没有发现折扣低于85%的Apple礼品卡。\\n"
-            content += "\\n监控系统运行正常，下次检查在2小时后。⏰"
+        print("📨 LINE通知を送信...")
         
-        print("📨 Sending notification...")
-        response = requests.post(
-            f"https://sctapi.ftqq.com/{sckey}.send",
-            data={
-                "title": title,
-                "desp": content
-            },
-            timeout=15
-        )
+        # Flex Messageで送信
+        success = send_line_flex_message(discounts)
         
-        if response.status_code == 200:
-            print("✅ Notification sent successfully!")
+        if success:
+            print("✅ LINE通知送信成功!")
             return True
         else:
-            print(f"❌ Notification failed with status: {response.status_code}")
+            print("❌ LINE通知送信失敗")
             return False
             
     except Exception as e:
-        print(f"❌ Error sending notification: {str(e)}")
+        print(f"❌ LINE通知送信エラー: {str(e)}")
         return False
 
 def main():
     print("=" * 60)
-    print("🔄 APPLE GIFT CARD MONITOR STARTING")
+    print("🔄 APPLEギフトカードモニター起動")
     print("=" * 60)
     
     start_time = time.time()
     
-    # 获取页面内容
+    # ページコンテンツを取得
     html_content = check_discounts()
     
     if html_content is None:
-        print("❌ Failed to get page content")
+        print("❌ ページコンテンツの取得に失敗")
         return
     
-    # 提取折扣信息
+    # 割引情報を抽出
     discounts = extract_discounts_from_html(html_content)
     
-    # 发送通知
+    # LINE通知を送信
     send_notification(discounts)
     
     execution_time = time.time() - start_time
-    print(f"⏱️ Total execution time: {execution_time:.2f} seconds")
+    print(f"⏱️ 総実行時間: {execution_time:.2f} 秒")
     print("=" * 60)
-    print("✅ MONITORING COMPLETE")
+    print("✅ モニタリング完了")
     
     return discounts
 
