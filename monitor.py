@@ -13,6 +13,10 @@ last_discounts = []
 
 def send_line_message(message):
     """发送LINE消息给自己"""
+    if not LINE_ACCESS_TOKEN or not LINE_USER_ID:
+        print("❌ LINE配置信息缺失")
+        return False
+    
     try:
         url = "https://api.line.me/v2/bot/message/push"
         headers = {
@@ -42,6 +46,31 @@ def send_line_message(message):
     except Exception as e:
         print(f"❌ LINE消息发送错误: {str(e)}")
         return False
+
+def should_skip_check():
+    """根据当前时间决定是否跳过检查"""
+    import datetime
+    
+    # 获取当前日本时间
+    jst = datetime.timezone(datetime.timedelta(hours=9))
+    now = datetime.datetime.now(jst)
+    weekday = now.weekday()  # 0=周一, 6=周日
+    hour = now.hour
+    minute = now.minute
+    
+    print(f"🕐 当前时间: {now.strftime('%Y-%m-%d %H:%M JST')}, 星期{['一','二','三','四','五','六','日'][weekday]}")
+    
+    # 0-6点之间：30分钟一次
+    if 0 <= hour < 6:
+        # 只在0分和30分运行
+        if minute not in [0, 30]:
+            print("💤 0-6点时段，非30分钟间隔时间，跳过")
+            return True
+    
+    # 其他时间：10分钟一次（不需要特殊处理，因为GitHub每10分钟触发一次）
+    
+    print("✅ 检查时段，继续执行")
+    return False
 
 def check_discounts():
     """检查折扣信息"""
@@ -93,7 +122,7 @@ def extract_discounts_from_html(html_content):
                 discount_text = element.get_text().strip()
                 discount = float(discount_text)
                 
-                # 80%以下の割引のみ対象（新需求）
+                # 80%以下の割引のみ対象
                 if discount < 80:
                     row = element.find_parent('tr')
                     if row:
@@ -190,10 +219,22 @@ def send_notification(discounts):
         return False
 
 def main():
+    import datetime
+    
+    # 获取日本时间
+    jst = datetime.timezone(datetime.timedelta(hours=9))
+    now = datetime.datetime.now(jst)
+    
     print("=" * 60)
-    print("🔄 APPLE礼品卡监控启动")
+    print(f"🔄 APPLE礼品卡监控启动 - {now.strftime('%Y-%m-%d %H:%M JST')}")
     print("=" * 60)
     
+    # 检查是否应该跳过
+    if should_skip_check():
+        print("🎯 本次检查已跳过")
+        return
+    
+    # 原有的监控逻辑...
     start_time = time.time()
     
     # 获取页面内容
