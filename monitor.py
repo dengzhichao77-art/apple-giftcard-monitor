@@ -2,8 +2,8 @@ import os
 import requests
 import re
 import time
-import json
 from playwright.sync_api import sync_playwright
+from bs4 import BeautifulSoup
 
 def check_discounts():
     print("🎯 Starting Apple gift card discount check...")
@@ -18,138 +18,110 @@ def check_discounts():
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
             })
             
-            print("📡 Navigating to target page...")
+            print("📡 Navigating to https://amaten.com/exhibitions/apple...")
             page.goto('https://amaten.com/exhibitions/apple', wait_until='networkidle', timeout=60000)
             
             print("⏳ Waiting for page to load...")
-            page.wait_for_timeout(10000)
-            
-            # 获取页面信息
-            title = page.title()
-            print(f"📄 Page title: {title}")
+            page.wait_for_timeout(5000)
             
             # 获取页面内容
             content = page.content()
             print(f"📊 Page content length: {len(content)} characters")
             
-            # 保存完整的页面内容用于分析
-            with open('debug_page.html', 'w', encoding='utf-8') as f:
-                f.write(content)
-            print("💾 Full page content saved to debug_page.html")
-            
-            # 尝试获取页面文本内容（可能更容易找到折扣）
-            text_content = page.inner_text('body')
-            with open('debug_text.txt', 'w', encoding='utf-8') as f:
-                f.write(text_content)
-            print("💾 Page text content saved to debug_text.txt")
-            
             browser.close()
             
-            return content, text_content
+            return content
         
     except Exception as e:
         print(f"❌ Error during discount check: {str(e)}")
         import traceback
         traceback.print_exc()
-        return None, None
+        return None
 
-def search_discounts(html_content, text_content):
-    """多种方式搜索折扣信息"""
-    print("🔍 Searching for discounts using multiple methods...")
+def extract_discounts_from_html(html_content):
+    """从HTML中提取折扣信息"""
+    print("🔍 Extracting discounts from HTML using BeautifulSoup...")
+    
     discounts = []
     
-    # 方法1: 基本的折扣模式
-    basic_patterns = [
-        r'(\d+\.?\d*)%\s*OFF',
-        r'(\d+\.?\d*)%\s*off',
-        r'(\d+\.?\d*)%\s*オフ',
-        r'(\d+\.?\d*)%\s*割引',
-        r'OFF\s*(\d+\.?\d*)%',
-        r'off\s*(\d+\.?\d*)%',
-        r'オフ\s*(\d+\.?\d*)%',
-        r'割引\s*(\d+\.?\d*)%',
-    ]
-    
-    # 方法2: 搜索包含数字和百分比的任何文本
-    percentage_patterns = [
-        r'(\d+\.?\d*)%',
-        r'(\d+)％',  # 全角百分比
-    ]
-    
-    # 方法3: 搜索价格相关的模式
-    price_patterns = [
-        r'¥\s*[\d,]+',
-        r'￥\s*[\d,]+',
-        r'[\d,]+\s*円',
-    ]
-    
-    # 在HTML内容中搜索
-    print("📋 Searching in HTML content...")
-    for pattern in basic_patterns + percentage_patterns:
-        matches = re.findall(pattern, html_content, re.IGNORECASE)
-        if matches:
-            print(f"🔎 Pattern '{pattern}' found {len(matches)} matches in HTML")
-            for match in matches:
+    try:
+        # 使用BeautifulSoup解析HTML
+        soup = BeautifulSoup(html_content, 'html.parser')
+        
+        # 方法1: 查找所有js-rate元素（主要方法）
+        rate_elements = soup.find_all('span', class_='js-rate')
+        print(f"📈 Found {len(rate_elements)} js-rate elements")
+        
+        for element in rate_elements:
+            try:
+                discount_text = element.get_text().strip()
+                discount = float(discount_text)
+                
+                # 只关注低于85%的折扣
+                if discount < 85:
+                    # 获取父级行信息用于上下文
+                    row = element.find_parent('tr')
+                    if row:
+                        # 获取面值
+                        face_value_elem = row.find('span', class_='js-face_value')
+                        face_value = face_value_elem.get_text().strip() if face_value_elem else "Unknown"
+                        
+                        # 获取价格
+                        price_elem = row.find('span', class_='js-price')
+                        price = price_elem.get_text().strip() if price_elem else "Unknown"
+                        
+                        # 获取折扣金额
+                        discount_amount_elem = row.find('span', class_='js-discount')
+                        discount_amount = discount_amount_elem.get_text().strip() if discount_amount_elem else "Unknown"
+                        
+                        discounts.append({
+                            'discount': discount,
+                            'face_value': face_value,
+                            'price': price,
+                            'discount_amount': discount_amount,
+                            'source': 'js-rate element'
+                        })
+                        print(f"✅ Found discount: {discount}% (面值: {face_value}円 → 价格: {price}円, 节省: {discount_amount}円)")
+            except ValueError:
+                continue
+        
+        # 方法2: 在表格行中搜索折扣（备用方法）
+        if not discounts:
+            print("🔍 Trying alternative search method...")
+            rows = soup.find_all('tr', class_='js-gift-row')
+            print(f"📊 Found {len(rows)} gift card rows")
+            
+            for row in rows:
                 try:
-                    discount = float(match)
-                    if 70 <= discount <= 95:
-                        if not any(abs(d - discount) < 0.1 for d in discounts):
-                            discounts.append(discount)
-                            print(f"✅ HTML DISCOUNT: {discount}%")
+                    # 在行文本中搜索百分比
+                    row_text = row.get_text()
+                    percentage_matches = re.findall(r'(\d+\.?\d*)%', row_text)
+                    
+                    for match in percentage_matches:
+                        discount = float(match)
+                        if discount < 85:
+                            # 检查是否已经添加过这个折扣
+                            if not any(abs(d['discount'] - discount) < 0.1 for d in discounts):
+                                discounts.append({
+                                    'discount': discount,
+                                    'face_value': "Unknown",
+                                    'price': "Unknown", 
+                                    'discount_amount': "Unknown",
+                                    'source': 'row text search'
+                                })
+                                print(f"✅ Found discount in row: {discount}%")
                 except:
                     continue
-    
-    # 在文本内容中搜索
-    print("📋 Searching in text content...")
-    for pattern in basic_patterns + percentage_patterns:
-        matches = re.findall(pattern, text_content, re.IGNORECASE)
-        if matches:
-            print(f"🔎 Pattern '{pattern}' found {len(matches)} matches in text")
-            for match in matches:
-                try:
-                    discount = float(match)
-                    if 70 <= discount <= 95:
-                        if not any(abs(d - discount) < 0.1 for d in discounts):
-                            discounts.append(discount)
-                            print(f"✅ TEXT DISCOUNT: {discount}%")
-                except:
-                    continue
-    
-    # 搜索价格信息（用于调试）
-    print("💰 Searching for price information...")
-    for pattern in price_patterns:
-        html_matches = re.findall(pattern, html_content)
-        text_matches = re.findall(pattern, text_content)
-        if html_matches:
-            print(f"💵 Price pattern '{pattern}' found in HTML: {html_matches[:3]}")  # 只显示前3个
-        if text_matches:
-            print(f"💵 Price pattern '{pattern}' found in text: {text_matches[:3]}")
-    
-    # 搜索特定的已知折扣（80.9）
-    if '80.9' in html_content or '80.9' in text_content:
-        print("🎉 Found '80.9' in content!")
-        if 80.9 not in discounts:
-            discounts.append(80.9)
-    
-    # 搜索80-95之间的任何数字
-    print("🔢 Searching for numbers in 80-95 range...")
-    number_pattern = r'\b(8[0-9]|9[0-5])(\.\d+)?\b'
-    html_numbers = re.findall(number_pattern, html_content)
-    text_numbers = re.findall(number_pattern, text_content)
-    
-    for num_tuple in html_numbers + text_numbers:
-        num_str = ''.join(num_tuple)
-        try:
-            num = float(num_str)
-            if 80 <= num <= 95:
-                if not any(abs(d - num) < 0.1 for d in discounts):
-                    discounts.append(num)
-                    print(f"✅ NUMBER FOUND: {num}%")
-        except:
-            continue
-    
-    print(f"📈 Total valid discounts found: {len(discounts)}")
-    return sorted(discounts)
+        
+        # 按折扣排序（从低到高）
+        discounts.sort(key=lambda x: x['discount'])
+        
+        print(f"📈 Total valid discounts found: {len(discounts)}")
+        return discounts
+        
+    except Exception as e:
+        print(f"❌ Error extracting discounts: {str(e)}")
+        return []
 
 def send_notification(discounts):
     sckey = os.environ.get('SCKEY')
@@ -159,26 +131,30 @@ def send_notification(discounts):
     
     try:
         if discounts:
-            title = f"🎉 Found {len(discounts)} Apple Gift Card Deals!"
-            content = "## 🍎 Apple Gift Card Discount Alert!\\n\\n"
+            # 只取最低的3个折扣，避免通知太长
+            top_discounts = discounts[:3]
             
-            for i, discount in enumerate(discounts, 1):
-                content += f"{i}. **{discount}% OFF**\\n"
+            title = f"🎉 发现 {len(discounts)} 个Apple礼品卡优惠!"
+            content = "## 🍎 Apple礼品卡优惠提醒\\n\\n"
+            content += f"共找到 **{len(discounts)}** 个折扣低于85%的优惠！\\n\\n"
             
-            content += "\\n---\\n"
-            content += "💡 Lower percentage = Better deal!\\n"
-            content += "\\n🔗 [View on Amaten](https://amaten.com/exhibitions/apple)"
+            for i, deal in enumerate(top_discounts, 1):
+                content += f"{i}. **{deal['discount']}% OFF**\\n"
+                content += f"   - 面值: {deal['face_value']}円 → 价格: {deal['price']}円\\n"
+                content += f"   - 节省: {deal['discount_amount']}円\\n\\n"
+            
+            if len(discounts) > 3:
+                content += f"... 还有 {len(discounts) - 3} 个其他优惠\\n\\n"
+            
+            content += "💡 **折扣越低越划算！**\\n"
+            content += "\\n🔗 [立即查看](https://amaten.com/exhibitions/apple)"
         else:
-            title = "📊 Apple Gift Card Monitor - Debug Info"
-            content = "## 🍎 Debug Information\\n\\n"
-            content += "The monitor ran successfully but found no discounts.\\n"
-            content += "\\n**What this means:**\\n"
-            content += "- ✅ JavaScript rendering is working\\n"
-            content += "- ✅ Page loaded successfully (92K+ characters)\\n"
-            content += "- ❌ No discount patterns matched\\n"
-            content += "\\nThe discount display format may be different than expected.\\n"
-            content += "Next check in 2 hours. ⏰"
+            title = "📊 Apple礼品卡监控报告"
+            content = "## 🍎 当前无优惠\\n\\n"
+            content += "目前没有发现折扣低于85%的Apple礼品卡。\\n"
+            content += "\\n监控系统运行正常，下次检查在2小时后。⏰"
         
+        print("📨 Sending notification...")
         response = requests.post(
             f"https://sctapi.ftqq.com/{sckey}.send",
             data={
@@ -207,14 +183,14 @@ def main():
     start_time = time.time()
     
     # 获取页面内容
-    html_content, text_content = check_discounts()
+    html_content = check_discounts()
     
     if html_content is None:
         print("❌ Failed to get page content")
         return
     
-    # 搜索折扣
-    discounts = search_discounts(html_content, text_content)
+    # 提取折扣信息
+    discounts = extract_discounts_from_html(html_content)
     
     # 发送通知
     send_notification(discounts)
